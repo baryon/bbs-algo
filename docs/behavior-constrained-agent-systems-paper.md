@@ -31,7 +31,9 @@ Our contribution is different. We do not present a new proof system, security re
 
 The answer developed here is architectural and control-theoretic. We argue that the right deployment pattern is a closed loop:
 
-`structured action -> policy-bound authorization -> validator gate -> structured feedback -> safe retry`
+```text
+structured action -> policy-bound authorization -> validator gate -> structured feedback -> safe retry
+```
 
 In other words, this paper should be read as a systems framing and deployment thesis built on top of the cryptographic direction opened by Li's work.
 
@@ -55,17 +57,11 @@ This is a workshop-style systems position paper. It is not:
 
 Its narrower claim is that high-risk machine-executable actions should no longer be left under ordinary unbounded credentials when a behavior-constrained alternative is available.
 
-## 2. Related Work and Positioning
+## 2. Positioning
 
-The direct cryptographic antecedent of this paper is **Y.Y.N. Li's** behavior-bound signature work [1]. Our paper differs in both objective and level of analysis. Li's contribution is cryptographic: it asks how behavioral constraints can become part of authorization validity itself. Our contribution is architectural: assuming that direction matters, how should real agent systems be organized so that constrained authorization becomes operationally meaningful?
+The direct antecedent of this paper is **Y.Y.N. Li's** behavior-bound signature work [1]. Our paper differs in both objective and level of analysis. Li's contribution is cryptographic: it asks how behavioral constraints can become part of authorization validity itself. Our contribution is architectural: assuming that direction matters, how should real agent systems be organized so that constrained authorization becomes operationally meaningful?
 
-Recent work on agent safety and evaluation has shown that tool-using agents exhibit substantial safety failures in realistic scenarios. ToolEmu, introduced by Ruan et al. [2], demonstrates that current LM agents can fail in high-stakes tool-use settings even under structured testing. More recently, Tang et al. [3] argue that agents may know that a risky action is unsafe and still execute it when acting in a trajectory, motivating an independent risk verifier. We are aligned with these observations, but our emphasis is different. Those works primarily evaluate or monitor agent behavior; we focus on constraining which high-risk actions can be authorized at all.
-
-Our framing is also related to older least-authority and capability-security traditions. Miller, Yee, and Shapiro [4] argue that capability systems offer important least-privilege advantages and help avoid confused-deputy problems. We share that least-authority intuition, but focus specifically on modern agent systems in which authority is exercised through structured actions, validators, and delegated signing paths rather than general-purpose object-capability runtimes.
-
-There is also a clear connection to proof-oriented authorization systems. Bauer, Schneider, and Felten [5] show that proof-carrying authorization can support expressive, distributed authorization with iterative proving. That line of work is close in spirit to ours, especially in treating authorization as something richer than identity alone. Our paper extends the discussion into the agent setting, where the critical architectural questions are action modeling, validator-gated execution, and feedback loops for retry under delegated machine agency.
-
-Finally, our control-theoretic language draws on the classical cybernetics tradition associated with Norbert Wiener [6]. We do not claim that cybernetics is new, nor that agent authorization should be reduced to control theory. Rather, we use the control-theoretic lens because it clarifies why validators, structured rejection reasons, and independent observation are architecturally important.
+The answer we develop is intentionally narrow. We treat behavior-constrained authorization as a systems primitive for high-risk agent actions, and we use a control-theoretic lens to explain why structured feedback, validator-gated execution, and independent observation materially improve the safety posture of delegated agent systems.
 
 ## 3. Problem Statement
 
@@ -255,7 +251,7 @@ Behavior-constrained authorization is strongest when used for hard boundaries, n
 
 ## 8. A Control-Theoretic Framing
 
-The most important interpretive claim of this paper is that the above loop is not only an authorization pipeline. It is also a **negative-feedback control system**, in the broad cybernetic sense associated with Wiener [6].
+The most important interpretive claim of this paper is that the above loop is not only an authorization pipeline. It is also a **negative-feedback control system** in the broad sense of control and feedback.
 
 That framing matters because it explains why behavior-constrained authorization is valuable even before full cryptographic idealization. The architecture works not just by forbidding certain requests, but by separating control, observation, and execution in a way that produces safe iterative convergence.
 
@@ -584,7 +580,9 @@ This paper argued that behavior-constrained authorization should be understood a
 
 The practical pattern is:
 
-`structured action -> policy-bound authorization -> validator gate -> execution -> structured feedback -> retry`
+```text
+structured action -> policy-bound authorization -> validator gate -> execution -> structured feedback -> retry
+```
 
 When implemented correctly, this pattern allows agents to search, retry, and optimize inside a bounded action space while preventing them from unilaterally authorizing actions outside that space.
 
@@ -597,13 +595,3 @@ The broader claim of this paper is therefore modest but concrete:
 ## References
 
 [1] **Y.Y.N. Li.** *Behavior-Bound Signatures: Cryptographic Policy Enforcement from Zero-Knowledge Soundness*. Zenodo, 2025. DOI: `10.5281/zenodo.18811273`. Available at: https://doi.org/10.5281/zenodo.18811273.
-
-[2] **Yangjun Ruan, Honghua Dong, Andrew Wang, Silviu Pitis, Yongchao Zhou, Jimmy Ba, Yann Dubois, Chris J. Maddison, and Tatsunori Hashimoto.** *Identifying the Risks of LM Agents with an LM-Emulated Sandbox*. arXiv:2309.15817, 2023.
-
-[3] **Yuzhi Tang, Tianxiao Li, Elizabeth Li, Chris J. Maddison, Honghua Dong, and Yangjun Ruan.** *LM Agents May Fail to Act on Their Own Risk Knowledge*. arXiv:2508.13465, 2025.
-
-[4] **Mark S. Miller, Ka-Ping Yee, and Jonathan Shapiro.** *Capability Myths Demolished*. Technical Report SRL2003-02, Johns Hopkins University Systems Research Laboratory, 2003.
-
-[5] **Lujo Bauer, Michael A. Schneider, and Edward W. Felten.** *A Proof-Carrying Authorization System*. Princeton University Technical Report TR-638-01, 2001.
-
-[6] **Norbert Wiener.** *Cybernetics or Control and Communication in the Animal and the Machine*. MIT Press, second edition reissue, 2019. Originally published in 1948.
