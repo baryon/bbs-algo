@@ -120,7 +120,7 @@ python3 src/python/run_cybernetics_demo.py
 | 文档 | 说明 |
 |------|------|
 | [paper/bbs.pdf](paper/bbs.pdf) | BBS 原始论文 — PS-CMA 安全模型和行为约束签名方案的形式化定义 |
-| [paper/behavior-constrained-agent-systems-paper.pdf](paper/behavior-constrained-agent-systems-paper.pdf) | 行为约束 Agent 系统扩展论文 |
+| [paper/behavior-constrained-agent-systems-paper.pdf](paper/behavior-constrained-agent-systems-paper.pdf) | 行为约束 Agent 系统扩展论文。Zenodo: https://zenodo.org/records/18952739。DOI: `10.5281/zenodo.18952739` |
 | [docs/bbs-paper-explained.md](docs/bbs-paper-explained.md) | 论文核心概念的通俗解读 |
 | [docs/bbs-application-memo.md](docs/bbs-application-memo.md) | 工程设计备忘录 — 为什么将 BBS 实现为"硬边界控制器"及实际部署考量 |
 | [docs/bbs-engineering-implementation.md](docs/bbs-engineering-implementation.md) | 实现指南 — 架构层次、操作建模、生产路线图 |
