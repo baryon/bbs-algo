@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Behavior-Constrained Algorithms for Safe Agent Engineering</title>
+<style>
+  @page { size: A4; margin: 22mm 18mm 22mm 18mm; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #111; line-height: 1.45; font-size: 11pt; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22pt; line-height: 1.15; margin: 0 0 10pt; }
+  h2 { font-size: 15pt; margin: 18pt 0 8pt; page-break-after: avoid; }
+  h3 { font-size: 12.5pt; margin: 14pt 0 6pt; page-break-after: avoid; }
+  p { margin: 0 0 9pt; text-align: justify; }
+  ul, ol { margin: 0 0 10pt 20pt; }
+  li { margin: 0 0 4pt; }
+  pre { white-space: pre-wrap; background: #f6f6f6; border: 1px solid #ddd; padding: 10pt; font-size: 9.5pt; overflow-wrap: anywhere; }
+  code { font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-size: 0.95em; }
+  .title-block { margin-bottom: 16pt; }
+  .title-block p { text-align: left; margin: 0 0 4pt; }
+</style>
+</head>
+<body>
+<main>
+<h1>Behavior-Constrained Algorithms for Safe Agent Engineering</h1>
+<p><strong>Long LI</strong> <code>lilong@gmail.com</code></p>
+<h2>Abstract</h2>
+<p>As software agents gain direct access to tools, APIs, payment rails, deployment pipelines, and persistent credentials, the classical authorization model becomes inadequate. Traditional signatures answer who signed, but not whether the signed action remained within a pre-committed behavioral boundary. Current agent safety practice therefore relies on software-layer guardrails such as middleware checks, policy engines, prompt instructions, and workflow controls. These mechanisms are useful, but they remain bypassable by bugs, prompt injection, replacement of the agent runtime, configuration drift, or unguarded execution paths.</p>
+<p>This paper argues for a systems position: behavior-constrained algorithms, inspired by behavior-bound signature ideas, should be deployed as a hard control layer for high-risk agent actions. The central engineering pattern is simple: structured action modeling, policy-bound signing, validator-gated execution, and feedback-driven retry. Under this pattern, an agent is free to plan, iterate, and optimize within a bounded action space, but it cannot unilaterally authorize actions outside its permitted envelope. We show how this model applies to payments, API invocation, autonomous software development, database mutation, file deletion, and enterprise approvals. We further argue that blockchain is not required for the first useful deployments; the immediate value lies in local or organizational control systems that restrict delegated signing capability at the action boundary.</p>
+<p>This is a systems position paper, not a formal cryptographic proof paper. Its focus is architecture, threat models, deployment flow, and engineering tradeoffs. The main claim is that behavior-constrained algorithms are most useful today not as a replacement for all agent infrastructure, but as a dedicated hard-control layer for actions that are too risky to leave under ordinary key-based authorization.</p>
+<p><strong>Keywords:</strong> agent safety, behavior-constrained algorithms, policy-bound signing, validator gate, action modeling, delegated authority</p>
+<h2>1. Introduction</h2>
+<p>The software industry is rapidly shifting from interactive assistants to autonomous or semi-autonomous agents. These agents can already plan tasks, invoke tools, modify source code, trigger deployments, move funds, update databases, and call external APIs. Once an agent is given direct credentials, the security problem changes fundamentally. The system is no longer only defending against outsiders who do not have the key; it must also defend against insiders, or delegated executors, that do have valid credentials but may act outside intended boundaries.</p>
+<p>This problem is particularly acute in agent systems because the delegated executor is not static. An agent may be:</p>
+<ul>
+<li>prompt-injected,</li>
+<li>misaligned with current task intent,</li>
+<li>buggy,</li>
+<li>partially compromised via tools or plugins,</li>
+<li>entirely replaced by a different runtime,</li>
+<li>or simply operating under stale context and incomplete world state.</li>
+</ul>
+<p>Under the common security model, if the agent holds a valid key, then any action it signs is structurally valid. Whether the action should have been authorized is delegated to software guardrails outside the signature itself. That leaves a persistent gap between identity validity and behavioral validity.</p>
+<p>This paper takes the position that this gap should be narrowed through behavior-constrained algorithms. The practical interpretation is not that every system must immediately adopt a full zero-knowledge cryptographic stack. Rather, the system should be designed so that:</p>
+<ol>
+<li>high-risk actions are normalized into structured actions,</li>
+<li>the signing capability is explicitly bound to allowed policy domains,</li>
+<li>a validator becomes the only execution gate,</li>
+<li>and policy failure yields machine-readable feedback for iterative correction.</li>
+</ol>
+<p>The result is a control-theoretic loop rather than a one-shot authorization check. The agent can still search, retry, and optimize, but only inside a hard operational envelope.</p>
+<h2>2. Problem Statement</h2>
+<p>The core problem is delegated authority without bounded behavior.</p>
+<p>In current agent engineering, most protections live in the software layer:</p>
+<ul>
+<li>prompt instructions,</li>
+<li>middleware filters,</li>
+<li>workflow checks,</li>
+<li>API gateway rules,</li>
+<li>policy engines,</li>
+<li>approval systems,</li>
+<li>sandbox settings,</li>
+<li>and environment-specific access controls.</li>
+</ul>
+<p>These layers matter, but they do not change the semantics of the credential itself. If the agent possesses an ordinary signing key or an unrestricted API token, the credential remains capable of authorizing arbitrary actions within the service that accepts it. Policy is therefore external to authorization rather than intrinsic to it.</p>
+<p>This creates a mismatch between how humans think about agent permissions and how systems actually enforce them. Humans think in terms such as:</p>
+<ul>
+<li>“the agent may pay up to 200 USD to approved vendors,”</li>
+<li>“the agent may update staging feature flags but not production tables,”</li>
+<li>“the agent may delete temporary files in the sandbox but never system files,”</li>
+<li>“the agent may invoke a deployment API only for staging,”</li>
+<li>“the agent may prepare an approval request but not finalize high-value approvals.”</li>
+</ul>
+<p>However, ordinary credentials do not encode such statements. They simply authorize use.</p>
+<p>The problem statement of this paper is therefore:</p>
+<p><strong>How should a practical agent system enforce high-risk behavioral constraints at the action boundary, rather than relying entirely on soft software-layer discipline?</strong></p>
+<h2>3. Threat Model</h2>
+<p>We assume an agent participates in a larger execution system and is authorized to request risky actions. The system may include planners, tool adapters, database clients, payment connectors, file-system accessors, deployment services, and business workflow engines.</p>
+<p>We consider the following threat classes:</p>
+<h3>3.1 Prompt Injection and Goal Hijacking</h3>
+<p>The agent receives instructions that redirect its behavior toward unauthorized recipients, endpoints, files, or environments.</p>
+<h3>3.2 Buggy Planning or Tool Use</h3>
+<p>The agent reasons incorrectly, misreads context, or selects a harmful tool invocation while still possessing syntactically valid credentials.</p>
+<h3>3.3 Runtime Replacement</h3>
+<p>The original agent process is replaced, modified, or wrapped by another runtime that still retains access to the authorization mechanism.</p>
+<h3>3.4 Partial Toolchain Compromise</h3>
+<p>A plugin, tool wrapper, CI helper, or command adapter alters the final action after planning but before execution.</p>
+<h3>3.5 Unsafe Direct Invocation</h3>
+<p>The system exposes an execution path that accepts actions directly, bypassing policy validation.</p>
+<p>This paper does not claim to solve:</p>
+<ul>
+<li>the truthfulness of external business claims,</li>
+<li>semantic quality evaluation,</li>
+<li>complete containment of arbitrary malware,</li>
+<li>or all possible off-chain social or organizational fraud.</li>
+</ul>
+<p>Its concern is narrower and more concrete: bounding which machine-executable actions a delegated agent can successfully authorize.</p>
+<h2>4. Position</h2>
+<p>The central position of this paper is:</p>
+<p><strong>Behavior-constrained algorithms should be deployed as a hard control layer for high-risk agent actions.</strong></p>
+<p>This position has four implications.</p>
+<h3>4.1 The Right Unit of Control Is the Structured Action</h3>
+<p>The system must not attempt to constrain free-form intent directly. It must constrain normalized actions such as:</p>
+<ul>
+<li><code>payment</code>,</li>
+<li><code>api_call</code>,</li>
+<li><code>db_update</code>,</li>
+<li><code>file_rm</code>,</li>
+<li><code>deploy_start</code>,</li>
+<li><code>approval_submit</code>.</li>
+</ul>
+<h3>4.2 The Right Boundary Is the Authorization Boundary</h3>
+<p>If the system waits until after ordinary signing to decide whether an action was appropriate, the credential has already remained too powerful. The signature or proof package should be generated only for actions that fit within the policy envelope.</p>
+<h3>4.3 The Validator Must Be the Only Gate to Execution</h3>
+<p>A constrained signing architecture collapses if the executor still offers side channels, legacy endpoints, or administrative bypasses that do not pass through the validator.</p>
+<h3>4.4 Blockchain Is Not Required for the First Useful Deployment</h3>
+<p>The immediate value of behavior-constrained algorithms appears in local or organizational control systems. A blockchain may become relevant later for shared auditability or decentralized settlement, but it is not a prerequisite for practical agent safety gains.</p>
+<h2>5. Reference Architecture</h2>
+<p>We propose the following reference architecture.</p>
+<pre><code class="language-text">
+Agent
+
+  |
+
+  v
+
+Structured Action Builder
+
+  |
+
+  v
+
+Policy-Bound Signer / Prover
+
+  |
+
+  v
+
+Validator Gate
+
+  |
+
+  v
+
+Execution Service
+
+  |
+
+  v
+
+Audit / Monitoring / Feedback
+
+</code></pre>
+<p>Each component has a distinct role.</p>
+<h3>5.1 Agent</h3>
+<p>The agent plans, retries, and optimizes. It is not trusted to remain aligned under all conditions.</p>
+<h3>5.2 Structured Action Builder</h3>
+<p>This component converts raw intent into canonical machine-readable actions. It defines field layout, serialization, hashes, and allowed action types.</p>
+<h3>5.3 Policy-Bound Signer / Prover</h3>
+<p>This component is the hard control boundary. It must only emit an authorization package for actions inside the allowed policy domain. In weaker MVP systems this may be implemented as a controlled signer; in stronger systems it may be a proof-producing component.</p>
+<h3>5.4 Validator Gate</h3>
+<p>The validator checks:</p>
+<ul>
+<li>registered public key or delegated identity,</li>
+<li>action binding,</li>
+<li>policy or circuit version,</li>
+<li>proof or signature validity,</li>
+<li>replay protection,</li>
+<li>and contextual admissibility.</li>
+</ul>
+<h3>5.5 Execution Service</h3>
+<p>The executor performs the requested action only after the validator has accepted it.</p>
+<h3>5.6 Audit and Feedback</h3>
+<p>The system records acceptance or rejection and emits structured reasons so that the agent can retry with a corrected action.</p>
+<h2>6. End-to-End Control Loop</h2>
+<p>The reference control loop is:</p>
+<pre><code class="language-text">
+Agent -&gt; Action -&gt; Sign/Prove -&gt; Validate -&gt; Reject or Execute -&gt; Feedback -&gt; Retry
+
+</code></pre>
+<p>This loop matters for two reasons.</p>
+<p>First, it changes the semantics of error handling. Rejection is not merely an exception; it is a control signal. The agent can inspect structured failure reasons such as:</p>
+<ul>
+<li><code>amount_exceeds_limit</code>,</li>
+<li><code>recipient_not_whitelisted</code>,</li>
+<li><code>db_env_not_allowed</code>,</li>
+<li><code>file_path_blocked</code>,</li>
+<li><code>unknown_public_key</code>,</li>
+<li><code>replayed_nonce</code>.</li>
+</ul>
+<p>Second, it creates a practical separation between hard and soft constraints.</p>
+<ul>
+<li>Hard constraints:</li>
+<p>- machine-verifiable, - deterministic, - suitable for policy-bound signing.</p>
+<li>Soft constraints:</li>
+<p>- semantic, - contextual, - subjective, - better handled by tests, review agents, or humans.</p>
+</ul>
+<p>This distinction is essential. Behavior-constrained algorithms are strongest when used for hard boundaries, not soft judgment.</p>
+<h2>7. Action Modeling</h2>
+<p>Action modeling is the most underestimated step in the entire architecture.</p>
+<p>Every high-risk operation must first be represented as a stable, structured action. For example:</p>
+<h3>7.1 Payment</h3>
+<pre><code class="language-json">
+{
+
+  &quot;type&quot;: &quot;payment&quot;,
+
+  &quot;amount&quot;: 168.50,
+
+  &quot;currency&quot;: &quot;USD&quot;,
+
+  &quot;recipient&quot;: &quot;vendor_123&quot;,
+
+  &quot;invoice_id&quot;: &quot;inv_20260311_001&quot;,
+
+  &quot;epoch&quot;: 202603111030,
+
+  &quot;nonce&quot;: &quot;n-001&quot;
+
+}
+
+</code></pre>
+<h3>7.2 API Invocation</h3>
+<pre><code class="language-json">
+{
+
+  &quot;type&quot;: &quot;api_call&quot;,
+
+  &quot;service&quot;: &quot;payment-gateway&quot;,
+
+  &quot;endpoint&quot;: &quot;/v1/payouts&quot;,
+
+  &quot;method&quot;: &quot;POST&quot;,
+
+  &quot;body_hash&quot;: &quot;....&quot;,
+
+  &quot;epoch&quot;: 202603111035,
+
+  &quot;nonce&quot;: &quot;n-002&quot;
+
+}
+
+</code></pre>
+<h3>7.3 Database Update</h3>
+<pre><code class="language-json">
+{
+
+  &quot;type&quot;: &quot;db_update&quot;,
+
+  &quot;env&quot;: &quot;staging&quot;,
+
+  &quot;table&quot;: &quot;feature_flags&quot;,
+
+  &quot;fields&quot;: [&quot;enabled&quot;],
+
+  &quot;where_scope&quot;: &quot;id_eq&quot;,
+
+  &quot;row_limit&quot;: 1,
+
+  &quot;epoch&quot;: 202603111330,
+
+  &quot;nonce&quot;: &quot;db-001&quot;
+
+}
+
+</code></pre>
+<h3>7.4 File Removal</h3>
+<pre><code class="language-json">
+{
+
+  &quot;type&quot;: &quot;file_rm&quot;,
+
+  &quot;path&quot;: &quot;/workspace/sandbox/build/output.tmp&quot;,
+
+  &quot;recursive&quot;: false,
+
+  &quot;epoch&quot;: 202603111332,
+
+  &quot;nonce&quot;: &quot;fs-001&quot;
+
+}
+
+</code></pre>
+<p>The point is not that these particular fields are universal. The point is that safety starts when the action space becomes explicit.</p>
+<h2>8. Application: Payments</h2>
+<p>Payments are one of the clearest application domains because the hard rules are usually obvious.</p>
+<p>A useful starting policy is:</p>
+<ul>
+<li>amount &lt;= 200 USD,</li>
+<li>recipient in whitelist,</li>
+<li>optional frequency limit,</li>
+<li>optional daily cumulative cap.</li>
+</ul>
+<p>Under a behavior-constrained design:</p>
+<ol>
+<li>the agent emits a structured payment action,</li>
+<li>the signer/prover only authorizes the action if it satisfies the policy,</li>
+<li>the validator checks binding, policy validity, and replay,</li>
+<li>and the executor forwards only accepted requests to the payment rail.</li>
+</ol>
+<p>The security gain is not that the payment stack becomes perfect. The gain is that an agent holding delegated authority no longer has unrestricted payment authority.</p>
+<p>What this does not solve:</p>
+<ul>
+<li>fake invoices,</li>
+<li>fraudulent off-chain claims,</li>
+<li>bad whitelist configuration,</li>
+<li>broken identity-to-recipient mapping.</li>
+</ul>
+<p>It constrains executable action boundaries, not business truth.</p>
+<h2>9. Application: API Invocation</h2>
+<p>Many risky operations are API operations in disguise.</p>
+<p>Useful hard constraints include:</p>
+<ul>
+<li>service whitelist,</li>
+<li>endpoint whitelist,</li>
+<li>method whitelist,</li>
+<li>resource identifier scope,</li>
+<li>body size or hash binding,</li>
+<li>frequency and quota limits.</li>
+</ul>
+<p>This model is especially attractive because it aligns well with existing gateway architectures. The validator can be placed in front of the API adapter without requiring a blockchain or distributed ledger.</p>
+<h2>10. Application: Autonomous Software Development</h2>
+<p>Autonomous software development is where many readers first think of agent safety, but it is also where confusion is common. A behavior-constrained algorithm does not judge whether generated code is elegant or architecturally ideal. That is the wrong target.</p>
+<p>The right target is dangerous machine action.</p>
+<h3>10.1 Constrain What the Agent May Do</h3>
+<p>Examples:</p>
+<ul>
+<li>write only inside approved repositories or directories,</li>
+<li>modify only allowed file classes,</li>
+<li>deploy only to staging,</li>
+<li>invoke only approved CI/CD endpoints,</li>
+<li>never alter production secrets,</li>
+<li>never invoke raw destructive shell commands,</li>
+<li>never update production databases,</li>
+<li>never delete files outside approved prefixes.</li>
+</ul>
+<h3>10.2 Do Not Use It to Judge Soft Quality</h3>
+<p>Examples that do not fit well:</p>
+<ul>
+<li>code elegance,</li>
+<li>design taste,</li>
+<li>completeness of product thinking,</li>
+<li>whether a patch is “good enough.”</li>
+</ul>
+<p>Those belong to tests, static analysis, code review, evaluation agents, or humans.</p>
+<h3>10.3 Dangerous Actions Are the Natural Fit</h3>
+<p>The most compelling development examples are actions such as:</p>
+<ul>
+<li><code>db_update</code>,</li>
+<li><code>file_rm</code>,</li>
+<li><code>shell_exec</code>,</li>
+<li><code>deploy_start</code>.</li>
+</ul>
+<p>This is because they are finite, structured, and machine-verifiable. A system can define policies such as:</p>
+<ul>
+<li>no <code>production</code> database updates,</li>
+<li>no writes to non-whitelisted tables,</li>
+<li>no file removal outside <code>/workspace/sandbox/**</code>,</li>
+<li>no deletion under <code>/etc</code>, <code>/usr</code>, or <code>/bin</code>.</li>
+</ul>
+<p>This is exactly the kind of boundary where behavior-constrained authorization is stronger than ordinary credentials plus wishful guardrails.</p>
+<h2>11. Application: Enterprise Approval and Finance</h2>
+<p>Enterprise workflow systems are another natural domain because approval logic often has explicit thresholds and scopes.</p>
+<p>Examples of hard constraints include:</p>
+<ul>
+<li>maximum approvable amount,</li>
+<li>allowed approval category,</li>
+<li>vendor whitelist,</li>
+<li>role restrictions,</li>
+<li>document presence requirements,</li>
+<li>per-period cumulative limits.</li>
+</ul>
+<p>The key engineering benefit here is that the authority boundary moves closer to the credential itself. Instead of merely trusting a workflow service to interpret role logic correctly, the approval authorization can be bound to a constrained identity and a structured action type.</p>
+<h2>12. Key Custody and Identity Binding</h2>
+<p>A practical system must decide how the agent obtains signing capability.</p>
+<p>Three models are common:</p>
+<h3>12.1 Agent Holds a Restricted Private Capability Directly</h3>
+<p>This is the simplest prototype model and the least safe production model.</p>
+<h3>12.2 Agent Calls a Controlled Signer</h3>
+<p>The agent does not access raw secret material. It submits a structured action to a signer or prover service that emits an authorization package only if the policy is satisfied.</p>
+<p>This is the preferred production posture.</p>
+<h3>12.3 Agent Uses Short-Lived Delegated Identities</h3>
+<p>The agent is issued a scoped identity limited by time, purpose, or environment. This reduces blast radius and simplifies rotation.</p>
+<p>In all cases, the validator must know which public keys or identity commitments are authorized for which action domains. If a request comes from an unregistered key, it should be rejected immediately.</p>
+<h2>13. Why Blockchain Is Not Required by Default</h2>
+<p>There is a temptation to treat behavior-constrained signing as immediately implying a new ledger or blockchain design. That is unnecessary for the first useful deployments.</p>
+<p>For payments, API calls, software delivery pipelines, database safety, and enterprise approvals, a local or organizational validator is enough to deliver value. The main gains come from:</p>
+<ul>
+<li>structured action modeling,</li>
+<li>constrained authorization,</li>
+<li>replay protection,</li>
+<li>validator gating,</li>
+<li>and auditable rejection reasons.</li>
+</ul>
+<p>A blockchain becomes relevant only if the use case additionally requires:</p>
+<ul>
+<li>multi-party distrust,</li>
+<li>public auditability,</li>
+<li>decentralized ordering,</li>
+<li>or shared settlement.</li>
+</ul>
+<p>This means the practical deployment order should usually be:</p>
+<ol>
+<li>local hard-control layer first,</li>
+<li>shared ledger later if needed.</li>
+</ol>
+<h2>14. Deployment Considerations</h2>
+<p>A behavior-constrained system becomes useful only when several operational details are handled correctly.</p>
+<h3>14.1 Replay Protection</h3>
+<p>Every action package needs replay protection through nonce design, epoch binding, and validator-side nonce storage.</p>
+<h3>14.2 Policy Versioning</h3>
+<p>Policies inevitably change. The authorization package must therefore bind not only the action, but also the policy or circuit version it is evaluated against.</p>
+<h3>14.3 Structured Failure Reasons</h3>
+<p>The system should return machine-readable rejection causes so that the agent can retry safely. Without structured feedback, the architecture loses its iterative control advantage.</p>
+<h3>14.4 Execution Path Discipline</h3>
+<p>No side channel should be able to perform a high-risk action without passing through the validator.</p>
+<h3>14.5 Auditability</h3>
+<p>The system should record:</p>
+<ul>
+<li>action type,</li>
+<li>action hash,</li>
+<li>identity,</li>
+<li>policy version,</li>
+<li>validator decision,</li>
+<li>reason codes,</li>
+<li>and execution outcome.</li>
+</ul>
+<h2>15. Limits and Open Problems</h2>
+<p>This paper deliberately argues a narrower claim than “all agent safety can be solved cryptographically.”</p>
+<p>Several hard problems remain:</p>
+<h3>15.1 Soft Judgment Is Still Hard</h3>
+<p>Many important questions are not naturally expressible as bounded machine predicates.</p>
+<h3>15.2 Stateful Constraints Are More Difficult</h3>
+<p>Rate limits, cumulative budgets, and historical dependency require stronger state binding and are more complex than purely local constraints.</p>
+<h3>15.3 Proof Systems Are Expensive</h3>
+<p>A full proof-producing system introduces proving cost, proof verification cost, circuit management, and operational complexity.</p>
+<h3>15.4 Compatibility Is Limited</h3>
+<p>Most existing systems only accept ordinary signatures or API credentials. Adopting stronger behavior-constrained authorization often requires control over the execution gateway.</p>
+<h3>15.5 Bypass Risk Dominates in Practice</h3>
+<p>Even a strong authorization scheme fails if the executor still accepts a legacy, direct, or administrative path.</p>
+<h2>16. Discussion</h2>
+<p>The most important insight is that the value of behavior-constrained algorithms appears before full cryptographic perfection.</p>
+<p>Even in weaker MVP forms, the architectural pattern already changes the agent system:</p>
+<ul>
+<li>actions become explicit,</li>
+<li>authorization becomes bounded,</li>
+<li>validators become meaningful,</li>
+<li>failures become structured,</li>
+<li>and risky execution paths become easier to reason about.</li>
+</ul>
+<p>This matters because many real agent incidents are not caused by cryptanalytic failure. They are caused by ordinary over-authorization. Agents are frequently given capabilities far broader than their task envelope because traditional credentials are too coarse. Behavior-constrained designs attack that problem directly.</p>
+<h2>17. Conclusion</h2>
+<p>This paper argued that behavior-constrained algorithms should be treated as a practical hard-control layer for agent engineering. Their most important role is not to replace every part of the agent stack, nor to require immediate blockchain deployment, but to constrain high-risk actions at the authorization boundary.</p>
+<p>The engineering pattern is straightforward:</p>
+<p><code>structured action -&gt; policy-bound signing -&gt; validator gate -&gt; execution -&gt; feedback</code></p>
+<p>When implemented correctly, this pattern allows an agent to iterate freely inside a bounded action space while preventing it from unilaterally authorizing unsafe actions outside that space.</p>
+<p>The strongest practical applications today are not soft semantic judgments but hard machine actions such as payments, API calls, database updates, file deletions, deployments, and scoped approvals. These are the areas where behavior-constrained authorization can deliver immediate safety value.</p>
+<p>The broader claim of this paper is therefore modest but concrete:</p>
+<p><strong>safe agent engineering improves when authorization is made behavior-aware, action-structured, and validator-gated.</strong></p>
+<h2>References</h2>
+<p>[1] Y.Y.N. Li. <em>Behavior-Bound Signatures: Cryptographic Policy Enforcement from Zero-Knowledge Soundness</em>. Reference paper in this repository: <code>paper/bbs.pdf</code>.</p>
+</main>
+</body>
+</html>

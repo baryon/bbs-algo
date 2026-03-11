@@ -1,130 +1,176 @@
-# Python MVP README
+# Python MVPs
 
-## 目标
+[中文](README_zh.md) | English
 
-这个目录提供一个最小可运行的 Python 版支付授权 MVP，用来验证下面这条工程闭环：
+This directory contains runnable Python MVPs for the core BBS control loops discussed in the docs.
+
+Current demos cover three variants:
+
+- payment authorization
+- development safety guards
+- cybernetics-style feedback convergence
+
+These examples validate the engineering loop first. They are not full implementations of the paper's BBS primitive or zero-knowledge proof system.
+
+## Files
+
+- `bbs_payment_mvp.py`
+  - Core payment authorization example
+  - Includes action model, policy, signer, validator, and demo scenarios
+- `run_payment_demo.py`
+  - CLI runner for the payment demo
+- `bbs_dev_guard_mvp.py`
+  - Development safety guard example
+  - Includes `db_update` and `file_rm` policies, signer, validator, and demo scenarios
+- `run_dev_guard_demo.py`
+  - CLI runner for the dev-guard demo
+- `bbs_cybernetics_mvp.py`
+  - Cybernetics-oriented feedback loop example
+  - Shows how an agent revises a candidate action from structured validator feedback
+- `run_cybernetics_demo.py`
+  - CLI runner for the cybernetics demo
+
+## What These MVPs Show
+
+### Payment Authorization
+
+The payment demo validates this loop:
 
 `Agent -> Action -> Sign -> Validator -> Execute`
 
-这里的支付规则固定为一个简单例子：
+Policy:
 
-- 金额不超过 `200 USD`
-- 收款方必须在白名单中
+- amount must not exceed `200 USD`
+- recipient must be on the whitelist
 
-这个 MVP 重点验证工程链路，不是论文中完整的 BBS 原语实现。
-
-## 文件说明
-
-- `bbs_payment_mvp.py`
-  - 核心实现
-  - 包含数据结构、签名器、校验器、示例场景
-- `run_payment_demo.py`
-  - 命令行演示入口
-- `bbs_dev_guard_mvp.py`
-  - 开发危险 action 约束示例
-  - 包含 `db_update` 和 `file_rm` 的策略、签名器、校验器、示例场景
-- `run_dev_guard_demo.py`
-  - 开发危险 action demo 入口
-
-## 实现内容
-
-当前实现包含以下组件：
+Core components:
 
 - `PaymentAction`
-  - 表示一个结构化支付动作
 - `PaymentPolicy`
-  - 表示支付策略
 - `PolicyBoundSigner`
-  - 在签名前先检查策略
 - `PaymentValidator`
-  - 验证已注册公钥、签名、策略和重放
 
-## 运行方式
+### Dev Safety Guard
 
-在仓库根目录执行：
+The dev-guard demo applies the same loop to high-risk development actions:
+
+- `db_update`
+- `file_rm`
+
+It shows how dangerous operations can be constrained before execution by explicit policies and validator-side rechecks.
+
+### Cybernetics Feedback Loop
+
+The cybernetics demo focuses on:
+
+`Agent -> Validator -> Feedback -> Retry`
+
+It abstracts away from payment or dev actions and shows:
+
+- the validator as a sensor
+- structured rejection reasons as error signals
+- the agent as a controller that iteratively reduces deviation
+
+## How To Run
+
+Run from the repository root:
 
 ```bash
 python3 src/python/run_payment_demo.py
-```
-
-运行开发危险 action 示例：
-
-```bash
 python3 src/python/run_dev_guard_demo.py
+python3 src/python/run_cybernetics_demo.py
 ```
 
-## 输出场景
+## Demo Scenarios
 
-Demo 会输出 6 个场景：
+### Payment Demo
+
+The payment demo prints 6 scenarios:
 
 1. `valid_request`
-   - 合法支付，请求通过
+   - valid payment is accepted
 2. `signer_side_reject`
-   - 超额支付，在 signer 侧先拒绝
+   - over-limit payment is rejected by the signer
 3. `validator_reject_policy_bypass`
-   - 模拟绕过 signer 强行签名，但 validator 仍然拒绝
+   - direct signing bypass still fails at the validator
 4. `validator_reject_unknown_key`
-   - 使用未注册公钥签名，被 validator 拒绝
+   - unregistered public key is rejected
 5. `validator_reject_tamper`
-   - 签名后篡改 payload，被判定为无效签名
+   - payload tampering invalidates the signature
 6. `validator_reject_replay`
-   - 重放同一请求，被 nonce 检测拒绝
+   - replayed nonce is rejected
 
-开发危险 action 示例会输出 8 个场景：
+### Dev-Guard Demo
+
+The dev-guard demo prints 8 scenarios:
 
 1. `valid_db_update`
-   - 允许的 `staging` 单行更新通过
+   - safe single-row `staging` update is accepted
 2. `signer_reject_db_update`
-   - `production` / 非白名单表 / 批量更新在 signer 侧被拒绝
+   - `production` or non-whitelisted bulk update is rejected by the signer
 3. `validator_reject_db_policy_bypass`
-   - 强行绕过 signer 后，validator 仍拒绝危险 DB 更新
+   - bypassing signer-side checks still fails at the validator
 4. `valid_file_rm`
-   - 删除 `/workspace/sandbox/**` 下临时文件通过
+   - file removal under `/workspace/sandbox/**` is accepted
 5. `signer_reject_file_rm`
-   - 删除 `/etc/passwd` 在 signer 侧被拒绝
+   - dangerous path deletion is rejected by the signer
 6. `validator_reject_file_policy_bypass`
-   - 强行绕过 signer 后，validator 仍拒绝危险文件删除
+   - bypassing file policy still fails at the validator
 7. `validator_reject_unknown_key`
-   - 非注册公钥被拒绝
+   - unregistered public key is rejected
 8. `validator_reject_replay`
-   - 重放请求被拒绝
+   - replayed nonce is rejected
 
-## 设计边界
+### Cybernetics Demo
 
-这个实现故意保持简单，当前边界如下：
+The cybernetics demo prints 4 scenarios:
 
-- 使用 `Ed25519` 普通签名
-- 使用显式策略检查
-- validator 会重新执行策略判断
-- 不包含零知识证明
-- 不包含链上逻辑、共识或 gas 模型
-- `db_update` 和 `file_rm` 仅覆盖最小规则示例，不代表完整的系统权限模型
+1. `converges_with_structured_feedback`
+   - high-resolution feedback lets the agent converge within a bounded number of rounds
+2. `fails_with_coarse_feedback`
+   - coarse rejection reasons reduce convergence efficiency and the loop does not pass within the iteration limit
+3. `fails_with_unreachable_target`
+   - the target exceeds actuator limits, so the loop stops without converging
+4. `stops_without_feedback_channel`
+   - when the validator provides no actionable feedback, the loop cannot continue
 
-因此，它更准确的定位是：
+## Design Boundaries
 
-`支付闭环工程 MVP`
+These examples are intentionally simple:
 
-而不是：
+- they use `Ed25519` ordinary signatures where signing is involved
+- policy enforcement is explicit logic, not zero-knowledge proof verification
+- validators re-run policy checks
+- no on-chain logic, consensus, or gas model is included
+- `db_update` and `file_rm` cover only minimal example rules
+- the cybernetics demo only models feedback convergence, not real signer or BBS proof machinery
 
-`完整的 BBS / PS-CMA / ZK 实现`
+So the right framing is:
 
-## 为什么仍然有价值
+`engineering MVPs for BBS-style control loops`
 
-虽然它不是完整密码学原语实现，但它已经可以验证几个关键工程问题：
+not:
 
-- 高风险 action 是否先被结构化
-- signer 是否会先执行硬规则检查
-- validator 是否只接受已注册公钥
-- payload 是否和签名严格绑定
-- nonce 是否能阻止重放
-- `production` 数据库更新和系统目录删除是否能被当作危险 action 拦截
+`a complete BBS / PS-CMA / ZK implementation`
 
-这些正是后续升级到更强 BBS/ZK 版本前，最值得先跑通的部分。
+## Why They Are Still Useful
 
-## 下一步可扩展方向
+Even in this simplified form, the demos verify important engineering questions:
 
-- 把 validator 包装成 HTTP 服务
-- 增加更丰富的支付策略，如每日累计额度和频率限制
-- 把 action 模型扩展到 `api_call`、`fs.delete`、`db.query`
-- 将普通签名版本逐步替换为更强的证明型签名方案
-- 为 `db_update` / `file_rm` 增加更细的字段级、目录级和环境级策略
+- are high-risk actions structured before execution
+- does the signer reject invalid requests early
+- does the validator enforce registered identity and payload binding
+- does nonce-based replay protection work
+- can dangerous DB and file operations be blocked deterministically
+- can structured feedback drive an agent toward convergence
+
+These are the parts worth validating before moving to a stronger BBS or ZK-backed implementation.
+
+## Possible Extensions
+
+- wrap validators as HTTP services
+- add richer payment policies, such as daily quotas and rate limits
+- extend the action model to `api_call`, `fs.delete`, and `db.query`
+- replace ordinary signatures with proof-carrying signature schemes
+- add finer-grained field, directory, and environment policies for dev actions
+- map the cybernetics feedback protocol onto real signer and validator interfaces

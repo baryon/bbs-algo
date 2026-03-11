@@ -1,170 +1,139 @@
 # BBS-Algo
 
-一个围绕 BBS 落地思路构建的概念验证仓库，重点不是完整实现论文中的密码学原语，而是先把工程闭环跑通：
+**Behavior-Bounded Signatures for AI Agent Safety**
 
-`Agent -> Action -> Sign -> Validator -> Execute`
+[中文](README_zh.md) | [日本語](README_ja.md) | English
 
-当前仓库包含两类内容：
+---
 
-- `docs/`
-  - 论文解读与落地设计备忘录
-- `src/python` 和 `src/typescript`
-  - 两套最小可运行 MVP
-  - 用支付授权、数据库更新、文件删除三个例子验证“高风险 action 的结构化约束”
+BBS-Algo is a proof-of-concept implementation of **Behavior-Bounded Signatures (BBS)** — a cryptographic approach to constraining AI agent actions. Instead of relying on software-layer guardrails that can be bypassed by prompt injection, code bugs, or supply-chain attacks, BBS embeds policy constraints into the signature mechanism itself, making policy violations **mathematically impossible** rather than merely "checked by code."
 
-## 适合谁看
+## The Problem
 
-这份 README 面向开发者，适合下面几类读者：
+Traditional AI agent authorization separates identity verification from behavioral validation:
 
-- 想快速看懂仓库现在做到了什么
-- 想直接运行 Python 或 TypeScript demo
-- 想从工程角度理解 BBS 在 Agent 安全里的最小落地形态
-
-## 当前实现了什么
-
-当前仓库实现的是 `工程概念验证`，不是完整 BBS / PS-CMA / ZK 系统。
-
-已经做了两类 MVP：
-
-1. `支付授权 MVP`
-   - 规则：`200 USD 以内 + 白名单收款方`
-   - 验证：
-     - signer 侧先做规则检查
-     - validator 校验已注册公钥、签名绑定、策略、nonce 防重放
-
-2. `开发危险 action 约束 MVP`
-   - `db_update`
-     - 允许：`staging`、白名单表、白名单字段、单行更新
-     - 拒绝：`production`、非白名单表、危险字段、批量更新
-   - `file_rm`
-     - 允许：删除 `/workspace/sandbox/**`、`/workspace/tmp/**`
-     - 拒绝：删除 `/etc`、`/usr`、`/bin` 等系统路径
-
-## 快速运行
-
-### Python
-
-支付示例：
-
-```bash
-python3 src/python/run_payment_demo.py
+```
+Private Key + Ordinary Signature  →  "Who authorized this?"
+Software Layer + Policy Checks    →  "Should they have authorized this?"
 ```
 
-开发危险 action 示例：
+If an agent holds a valid key, its signatures are structurally valid regardless of whether the action violates policies. The policies live in soft layers — middleware, guardrails, prompt instructions — all of which can be bypassed.
 
-```bash
-python3 src/python/run_dev_guard_demo.py
+BBS closes this gap: **if the action violates the policy, a valid signature cannot be produced. Period.**
+
+## How It Works
+
+```
+Agent → Action → Policy-Bound Signer → Policy satisfied?
+                                        ├─ Yes → Valid signature → Validator → Execute
+                                        └─ No  → Mathematically impossible to sign → Rejected
 ```
 
-### TypeScript
+Key properties:
 
-支付示例：
+- **Action Binding** — Signatures cover the entire canonicalized action; tampering any field invalidates the signature
+- **Policy Fingerprint** — Cryptographic hash ensures signer and validator use the same policy version
+- **Replay Protection** — One-time nonce per operation
+- **Closed Execution Path** — High-risk executors accept only validated signed requests; no backdoors
 
-```bash
-ts-node -P src/typescript/tsconfig.json src/typescript/runPaymentDemo.ts
+## Repository Structure
+
 ```
-
-开发危险 action 示例：
-
-```bash
-ts-node -P src/typescript/tsconfig.json src/typescript/runDevGuardDemo.ts
-```
-
-如果只想检查 TS 是否能编译：
-
-```bash
-tsc -p src/typescript/tsconfig.json
-```
-
-## 运行后会看到什么
-
-支付示例会展示：
-
-- 合法请求通过
-- signer 侧拒绝超额支付
-- validator 拒绝策略绕过
-- validator 拒绝未知公钥
-- validator 拒绝 payload 篡改
-- validator 拒绝重放
-
-开发危险 action 示例会展示：
-
-- 合法的 `db_update` 通过
-- 危险的 `db_update` 在 signer 或 validator 侧被拒绝
-- 合法的 `file_rm` 通过
-- 删除系统路径的 `file_rm` 被拒绝
-- 未知公钥和重放也会被拒绝
-
-## 目录结构
-
-```text
 .
-├── README.md
-├── docs
-│   ├── bbs-paper-explained.md
-│   ├── bbs-application-memo.md
-│   └── plans
-├── paper
-│   └── bbs.pdf
-└── src
-    ├── python
-    │   ├── README.md
-    │   ├── bbs_payment_mvp.py
-    │   ├── run_payment_demo.py
-    │   ├── bbs_dev_guard_mvp.py
-    │   └── run_dev_guard_demo.py
-    └── typescript
-        ├── README.md
-        ├── tsconfig.json
-        ├── bbsPaymentMvp.ts
-        ├── runPaymentDemo.ts
-        ├── bbsDevGuardMvp.ts
-        └── runDevGuardDemo.ts
+├── paper/
+│   ├── bbs.pdf                              # Original BBS paper
+│   └── behavior-constrained-agent-systems-paper.pdf
+├── docs/
+│   ├── bbs-paper-explained.md               # Paper walkthrough
+│   ├── bbs-application-memo.md              # Engineering design memo
+│   ├── bbs-engineering-implementation.md    # Implementation guide
+│   ├── behavior-constrained-agent-systems-paper.md
+│   ├── ai-agent-safety-crisis-and-bbs-solution.md  # Industry context (Chinese)
+│   └── ai-agent-safety-crisis-and-bbs-solution-en.md  # Industry context (English)
+└── src/
+    └── python/
+        ├── bbs_payment_mvp.py               # Payment authorization MVP
+        ├── bbs_dev_guard_mvp.py             # Dev safety guard MVP
+        ├── bbs_cybernetics_mvp.py           # Control-theory feedback loop MVP
+        ├── run_payment_demo.py              # Payment demo runner
+        ├── run_dev_guard_demo.py            # Dev guard demo runner
+        └── run_cybernetics_demo.py          # Cybernetics demo runner
 ```
 
-## 先看哪几个文件
+## Quick Start
 
-如果你第一次进仓库，我建议按这个顺序：
+```bash
+# Payment authorization demo
+python3 src/python/run_payment_demo.py
 
-1. 看 [docs/bbs-application-memo.md](/Users/lilong/Works/BBS-Algo/docs/bbs-application-memo.md)
-   - 理解为什么这里把 BBS 先落成“硬边界控制器”
-2. 看 Python 支付 MVP：
-   - [src/python/bbs_payment_mvp.py](/Users/lilong/Works/BBS-Algo/src/python/bbs_payment_mvp.py)
-3. 看 Python 开发危险 action MVP：
-   - [src/python/bbs_dev_guard_mvp.py](/Users/lilong/Works/BBS-Algo/src/python/bbs_dev_guard_mvp.py)
-4. 再看 TypeScript 对应实现：
-   - [src/typescript/bbsPaymentMvp.ts](/Users/lilong/Works/BBS-Algo/src/typescript/bbsPaymentMvp.ts)
-   - [src/typescript/bbsDevGuardMvp.ts](/Users/lilong/Works/BBS-Algo/src/typescript/bbsDevGuardMvp.ts)
+# Dev safety guard demo
+python3 src/python/run_dev_guard_demo.py
 
-## 这个仓库故意没有做什么
+# Control-theory feedback loop demo
+python3 src/python/run_cybernetics_demo.py
+```
 
-为了把验证边界收紧，这个仓库当前没有做：
+## MVP Coverage
 
-- 完整 BBS 原语实现
-- 零知识证明电路
-- 链上验证
-- 共识协议
-- gas 模型
-- 网络服务化
-- 严格生产级密钥管理
+### Payment Authorization
 
-也就是说，当前代码是在验证：
+Policy: max 200 USD per transaction, whitelisted recipients only.
 
-`如果把高风险动作先结构化，再绑定签名、公钥注册表、策略检查和 nonce，闭环是否能工作。`
+| Scenario | Result |
+|----------|--------|
+| Valid payment (168.50 USD → vendor_123) | ✅ Accepted |
+| Over-limit payment (243 USD) | ❌ Signer rejects |
+| Policy bypass (attacker signs directly) | ❌ Validator rejects policy mismatch |
+| Unknown key | ❌ Validator rejects unregistered key |
+| Payload tampering (change recipient after signing) | ❌ Signature verification fails |
+| Replay attack (reuse nonce) | ❌ Validator blocks duplicate nonce |
 
-## 已知边界
+### Dev Safety Guard
 
-- 当前 Python 和 TypeScript 版本都使用普通签名，不是完整 ZK/BBS
-- TypeScript 版为了兼容当前环境，使用了 `// @ts-nocheck`
-- `db_update` 和 `file_rm` 只覆盖最小策略示例，不代表完整系统权限模型
-- 当前目录不是 Git 仓库，没有 commit 历史
+**DB Updates** — allowed only on staging, whitelisted tables/fields, single-row:
 
-## 下一步建议
+| Scenario | Result |
+|----------|--------|
+| staging / feature_flags / enabled / 1 row | ✅ Accepted |
+| production / users / role / bulk update | ❌ Rejected |
 
-如果继续往前推进，最自然的路线是：
+**File Removal** — allowed only in sandbox/tmp paths:
 
-1. 把 validator 包装成 HTTP 服务
-2. 把策略和公钥注册表外置成配置
-3. 抽象统一的 `action` 注册机制
-4. 增加 `api_call`、`deploy.start` 等更多高风险 action
-5. 最后再讨论是否升级到更强的 BBS/ZK 版本
+| Scenario | Result |
+|----------|--------|
+| /workspace/sandbox/\*\* | ✅ Accepted |
+| /etc/passwd | ❌ Rejected |
+
+### Control-Theory Feedback Loop
+
+Demonstrates how the BBS loop functions as a negative feedback control system. The agent iterates toward multi-dimensional acceptance criteria (quality, cost, latency, risk) guided by validator feedback.
+
+| Scenario | Feedback Mode | Result |
+|----------|---------------|--------|
+| Rich feedback + reachable target | Exact deviations per dimension | ✅ Converges in 3–4 rounds |
+| Coarse feedback + same target | Violation reasons only, no values | ❌ Fails to converge within budget |
+| Rich feedback + unreachable target | Exact deviations | ❌ Agent hits actuator limits, stops |
+| No feedback channel | Nothing returned | ❌ Agent cannot correct, stops immediately |
+
+## Papers & Documentation
+
+| Document | Description |
+|----------|-------------|
+| [paper/bbs.pdf](paper/bbs.pdf) | Original BBS paper — formal definitions of PS-CMA security model and behavior-bounded signature schemes |
+| [paper/behavior-constrained-agent-systems-paper.pdf](paper/behavior-constrained-agent-systems-paper.pdf) | Extended paper on behavior-constrained agent systems |
+| [docs/bbs-paper-explained.md](docs/bbs-paper-explained.md) | Accessible walkthrough of the paper's core concepts |
+| [docs/bbs-application-memo.md](docs/bbs-application-memo.md) | Engineering design memo — why BBS is implemented as a "hard boundary controller" and practical deployment considerations |
+| [docs/bbs-engineering-implementation.md](docs/bbs-engineering-implementation.md) | Implementation guide covering architecture layers, action modeling, and production roadmap |
+| [docs/behavior-constrained-agent-systems-paper.md](docs/behavior-constrained-agent-systems-paper.md) | Full paper content in Markdown format |
+| [docs/ai-agent-safety-crisis-and-bbs-solution-en.md](docs/ai-agent-safety-crisis-and-bbs-solution-en.md) | Industry context: real AI agent safety incidents and how BBS addresses them |
+| [docs/ai-agent-safety-crisis-and-bbs-solution.md](docs/ai-agent-safety-crisis-and-bbs-solution.md) | Same article in Chinese (中文版) |
+
+## Scope
+
+This repository is an **engineering proof-of-concept**. It intentionally uses Ed25519 signatures instead of full zero-knowledge proofs to keep the control flow clear and auditable. The current MVPs validate that the `Agent → Signer → Validator → Executor` loop works end-to-end with policy binding, action binding, replay protection, structured rejection feedback, and control-theoretic convergence driven by feedback precision.
+
+Not included: ZK proof circuits, on-chain verification, consensus protocols, production key management, or network service wrappers.
+
+## License
+
+MIT
