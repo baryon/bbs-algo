@@ -119,7 +119,7 @@ Demonstrates how the BBS loop functions as a negative feedback control system. T
 
 | Document | Description |
 |----------|-------------|
-| [paper/bbs.pdf](paper/bbs.pdf) | Original BBS paper — formal definitions of PS-CMA security model and behavior-bounded signature schemes |
+| [paper/bbs.pdf](paper/bbs.pdf) | Original BBS paper — formal definitions of PS-CMA security model and behavior-bounded signature schemes. Zenodo: https://zenodo.org/records/18811273. DOI: `10.5281/zenodo.18811273` |
 | [paper/behavior-constrained-agent-systems-paper.pdf](paper/behavior-constrained-agent-systems-paper.pdf) | Extended paper on behavior-constrained agent systems. Zenodo: https://zenodo.org/records/18952739. DOI: `10.5281/zenodo.18952739` |
 | [docs/bbs-paper-explained.md](docs/bbs-paper-explained.md) | Accessible walkthrough of the paper's core concepts |
 | [docs/bbs-application-memo.md](docs/bbs-application-memo.md) | Engineering design memo — why BBS is implemented as a "hard boundary controller" and practical deployment considerations |
