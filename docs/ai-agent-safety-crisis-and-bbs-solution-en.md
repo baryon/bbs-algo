@@ -182,7 +182,7 @@ A well-designed agent can adjust its behavior based on this feedback: reduce the
 
 ## V. This Is Not Theory — Working MVPs Exist
 
-The BBS project includes two complete MVP demonstrations (Python and TypeScript) covering the following scenarios:
+The BBS project includes two complete MVP demonstrations (Python) covering the following scenarios:
 
 **Payment authorization demo:**
 - ✅ Valid payment (168.50 USD → vendor_123): signature passes, execution succeeds
